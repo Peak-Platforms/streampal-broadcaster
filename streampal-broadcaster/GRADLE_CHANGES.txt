@@ -1,0 +1,64 @@
+STREAMPAL BROADCASTER — GRADLE CHANGES
+======================================
+These edits must be made manually after running `npx cap sync android`.
+
+── 1. android/app/build.gradle ───────────────────────────────────────────────
+
+Add to dependencies block:
+
+    implementation 'com.github.pedroSG94.RootEncoder:library:2.3.4'
+    implementation 'com.github.pedroSG94.RootEncoder:rtmpdroid:2.3.4'
+
+Add to android block:
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+── 2. android/build.gradle ───────────────────────────────────────────────────
+
+Add to allprojects > repositories:
+
+    maven { url 'https://jitpack.io' }
+
+── 3. android/app/src/main/AndroidManifest.xml ───────────────────────────────
+
+Add permissions (inside <manifest> before <application>):
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+Add StreamActivity (inside <application>):
+
+    <activity
+        android:name="com.streampal.broadcaster.StreamActivity"
+        android:screenOrientation="landscape"
+        android:theme="@style/Theme.AppCompat.NoActionBar"
+        android:exported="false" />
+
+── 4. android/app/src/main/java/[package]/MainActivity.java ─────────────────
+
+Add plugin registration in onCreate:
+
+    import com.streampal.broadcaster.RtmpPlugin;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        registerPlugin(RtmpPlugin.class);
+    }
+
+── 5. KEYSTORE (for release builds only) ────────────────────────────────────
+
+Generate a keystore if you don't have one:
+
+    keytool -genkey -v -keystore streampal.keystore \
+      -alias streampal -keyalg RSA -keysize 2048 -validity 10000
+
+Add to GitHub Secrets:
+    KEYSTORE_PASSWORD
+    KEY_ALIAS
+    KEY_PASSWORD
