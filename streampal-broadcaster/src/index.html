@@ -309,15 +309,28 @@ let durationTimer = null;
 let startTime    = null;
 
 // ── CAPACITOR PLUGIN ───────────────────────────────────────────────────────
-const RtmpStream = window.Capacitor?.Plugins?.RtmpStream || null;
+let RtmpStream = null;
 
-// Listen for stream events from native layer
-if (window.Capacitor) {
-  window.Capacitor.Plugins.RtmpStream?.addListener('streamEvent', (event) => {
-    handleStreamEvent(event);
-  });
+async function initPlugin() {
+  try {
+    if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+      const { RtmpStream: plugin } = window.Capacitor.Plugins;
+      if (plugin) {
+        RtmpStream = plugin;
+        console.log('[StreamPal] Native RTMP plugin loaded');
+        RtmpStream.addListener('streamEvent', (event) => {
+          handleStreamEvent(event);
+        });
+      }
+    } else {
+      console.log('[StreamPal] Simulation mode');
+    }
+  } catch(e) {
+    console.error('[StreamPal] Plugin init error:', e);
+  }
 }
 
+initPlugin();
 // ── SETUP ──────────────────────────────────────────────────────────────────
 document.getElementById('streamKeyInput').addEventListener('input', function() {
   document.getElementById('saveBtn').disabled = !this.value.trim();

@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>StreamPal Broadcaster</title>
+  <style>
+    :root {
+      --bg:      #06080a;
+      --bg2:     #0d1014;
+      --sp:      #2563eb;
+      --sp2:     #1d4ed8;
+      --live:    #ef4444;
+      --live2:   #b91c1c;
+      --green:   #22c55e;
+      --text:    #f1f5f9;
+      --text2:   #64748b;
+      --border:  rgba(255,255,255,0.08);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── SCREENS ─────────────────────────────────────────────────────── */
+    .screen {
+      position: absolute; inset: 0;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 24px;
+      gap: 0;
+    }
+    .screen.active { display: flex; }
+
+    /* ── SETUP SCREEN ────────────────────────────────────────────────── */
+    #setupScreen { gap: 24px; }
+    .sp-logo {
+      font-size: 28px; font-weight: 800; letter-spacing: -.5px;
+      color: var(--text); margin-bottom: 8px;
+    }
+    .sp-logo span { color: #60a5fa; }
+    .sp-tagline {
+      font-size: 13px; color: var(--text2);
+      text-align: center; line-height: 1.5;
+    }
+    .setup-card {
+      width: 100%; max-width: 340px;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 24px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text2); }
+    .field input {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 10px;
+      padding: 12px 14px; font-size: 15px; width: 100%;
+    }
+    .field input:focus { outline: none; border-color: var(--sp); }
+    .field input::placeholder { color: var(--text2); }
+    .server-display {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px;
+      font-size: 12px; color: var(--text2);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      word-break: break-all;
+    }
+    .btn-go {
+      width: 100%; padding: 16px;
+      background: var(--sp); color: #fff;
+      border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 700;
+      letter-spacing: .05em; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-go:active { background: var(--sp2); }
+    .btn-go:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── READY SCREEN ────────────────────────────────────────────────── */
+    #readyScreen { justify-content: space-between; padding: 48px 24px 56px; }
+    .ready-header {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .ready-logo { font-size: 20px; font-weight: 800; color: var(--text); }
+    .ready-logo span { color: #60a5fa; }
+    .stream-key-label {
+      font-size: 11px; color: var(--text2);
+      font-family: monospace; letter-spacing: .05em;
+    }
+
+    /* BIG RECORD BUTTON */
+    .record-wrap {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 20px;
+    }
+    .record-btn {
+      width: 140px; height: 140px; border-radius: 50%;
+      border: 4px solid rgba(255,255,255,0.1);
+      background: var(--sp);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: transform .1s, background .2s;
+      box-shadow: 0 0 0 0 rgba(37,99,235,0.4);
+    }
+    .record-btn:active { transform: scale(.95); }
+    .record-btn.live {
+      background: var(--live);
+      box-shadow: 0 0 0 16px rgba(239,68,68,0.15);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%,100% { box-shadow: 0 0 0 16px rgba(239,68,68,0.15); }
+      50%      { box-shadow: 0 0 0 28px rgba(239,68,68,0.05); }
+    }
+    .record-icon { font-size: 48px; line-height: 1; }
+    .record-label {
+      font-size: 15px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text2);
+    }
+    .record-label.live { color: var(--live); }
+
+    /* STATUS */
+    .status-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--text2);
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text2); transition: background .3s;
+    }
+    .status-dot.live { background: var(--live); animation: dot-pulse 1s infinite; }
+    .status-dot.connecting { background: #f59e0b; animation: dot-pulse .5s infinite; }
+    .status-dot.error { background: var(--live); }
+    @keyframes dot-pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+    /* CONTROLS BAR */
+    .controls-bar {
+      display: flex; gap: 16px; align-items: center;
+    }
+    .ctrl-btn {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--bg2); border: 1px solid var(--border);
+      font-size: 22px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    .ctrl-btn:active { background: rgba(255,255,255,0.1); }
+    .ctrl-btn.active { background: rgba(239,68,68,0.15); border-color: var(--live); }
+
+    /* STATS BAR */
+    .stats-bar {
+      display: flex; gap: 20px;
+      font-size: 11px; color: var(--text2);
+      font-family: monospace;
+    }
+    .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .stat-val { font-size: 15px; font-weight: 700; color: var(--text); }
+
+    /* DURATION */
+    .duration {
+      font-size: 32px; font-weight: 800;
+      font-family: 'SF Mono', monospace;
+      color: var(--text); letter-spacing: .05em;
+    }
+    .duration.hidden { opacity: 0; }
+
+    /* SETTINGS LINK */
+    .settings-link {
+      position: absolute; top: 16px; right: 16px;
+      font-size: 22px; cursor: pointer; opacity: .4;
+    }
+    .settings-link:active { opacity: 1; }
+
+    /* CONNECTION QUALITY */
+    .quality-bar {
+      display: flex; gap: 3px; align-items: flex-end; height: 16px;
+    }
+    .quality-bar div {
+      width: 4px; border-radius: 2px; background: var(--green);
+      transition: opacity .3s;
+    }
+    .quality-bar div:nth-child(1) { height: 5px; }
+    .quality-bar div:nth-child(2) { height: 9px; }
+    .quality-bar div:nth-child(3) { height: 13px; }
+    .quality-bar div:nth-child(4) { height: 16px; }
+    .quality-bar.poor div:nth-child(3),
+    .quality-bar.poor div:nth-child(4) { opacity: .2; background: #f59e0b; }
+    .quality-bar.poor div:nth-child(1),
+    .quality-bar.poor div:nth-child(2) { background: #f59e0b; }
+    .quality-bar.bad  div { background: var(--live); }
+    .quality-bar.bad  div:nth-child(2),
+    .quality-bar.bad  div:nth-child(3),
+    .quality-bar.bad  div:nth-child(4) { opacity: .2; }
+
+    /* TOAST */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 10px 20px; font-size: 13px; color: var(--text);
+      opacity: 0; transition: opacity .25s; pointer-events: none;
+      white-space: nowrap; z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- ── SETUP SCREEN ─────────────────────────────────────────────────────── -->
+<div class="screen active" id="setupScreen">
+  <div class="sp-logo">Stream<span>Pal</span></div>
+  <div class="sp-tagline">Enter your stream key to get started.<br>You only need to do this once.</div>
+
+  <div class="setup-card">
+    <div class="field">
+      <label>Stream Key</label>
+      <input type="text" id="streamKeyInput" placeholder="your-stream-key"
+        autocapitalize="none" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>RTMP Server</label>
+      <div class="server-display" id="serverDisplay">rtmp://157.245.208.49:1935/live</div>
+    </div>
+    <div class="field">
+      <label>Video Quality</label>
+      <select id="qualitySelect" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px 14px;font-size:15px;width:100%;">
+        <option value="hd">HD 720p — Recommended</option>
+        <option value="sd">SD 480p — Low Bandwidth</option>
+        <option value="low">Low 360p — Marginal Signal</option>
+      </select>
+    </div>
+    <button class="btn-go" id="saveBtn" onclick="saveSetup()" disabled>Save & Continue</button>
+  </div>
+</div>
+
+<!-- ── READY SCREEN ─────────────────────────────────────────────────────── -->
+<div class="screen" id="readyScreen">
+
+  <div class="settings-link" onclick="goToSetup()">⚙️</div>
+
+  <div class="ready-header">
+    <div class="ready-logo">Stream<span>Pal</span></div>
+    <div class="stream-key-label" id="keyDisplay"></div>
+  </div>
+
+  <div class="record-wrap">
+    <div class="duration hidden" id="duration">00:00:00</div>
+
+    <div class="record-btn" id="recordBtn" onclick="toggleStream()">
+      <div class="record-icon" id="recordIcon">●</div>
+    </div>
+
+    <div class="record-label" id="recordLabel">TAP TO GO LIVE</div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+    <div class="status-row">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Ready</span>
+      <div class="quality-bar" id="qualityBar">
+        <div></div><div></div><div></div><div></div>
+      </div>
+    </div>
+
+    <div class="stats-bar" id="statsBar" style="opacity:0;">
+      <div class="stat">
+        <div class="stat-val" id="statBitrate">—</div>
+        <div>kbps</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="statFps">—</div>
+        <div>fps</div>
+      </div>
+    </div>
+
+    <div class="controls-bar">
+      <div class="ctrl-btn" id="muteBtn" onclick="toggleMute()" title="Mute">🎤</div>
+      <div class="ctrl-btn" onclick="flipCamera()" title="Flip">🔄</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ─────────────────────────────────────────────────────────────────
+const RTMP_SERVER  = 'rtmp://157.245.208.49:1935/live';
+const VIEWER_API   = 'https://live.xsen.fun:8443/viewer';
+const STORAGE_KEY  = 'sp_broadcaster_config';
+
+const QUALITY_PRESETS = {
+  hd:  { width: 1280, height: 720,  fps: 30, bitrate: 1500 * 1024 },
+  sd:  { width: 854,  height: 480,  fps: 24, bitrate: 800  * 1024 },
+  low: { width: 640,  height: 360,  fps: 15, bitrate: 400  * 1024 }
+};
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+let isLive       = false;
+let isMuted      = false;
+let streamKey    = '';
+let quality      = 'hd';
+let durationTimer = null;
+let startTime    = null;
+
+// ── CAPACITOR PLUGIN ───────────────────────────────────────────────────────
+let RtmpStream = null;
+
+function initPlugin() {
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    RtmpStream = window.Capacitor.Plugins?.RtmpStream || null;
+    if (RtmpStream) {
+      RtmpStream.addListener('streamEvent', handleStreamEvent);
+      console.log('[StreamPal] Native plugin ready');
+    }
+  }
+}
+
+document.addEventListener('deviceready', initPlugin);
+setTimeout(initPlugin, 300);
+
+// ── SETUP ──────────────────────────────────────────────────────────────────
+document.getElementById('streamKeyInput').addEventListener('input', function() {
+  document.getElementById('saveBtn').disabled = !this.value.trim();
+});
+
+function saveSetup() {
+  const key = document.getElementById('streamKeyInput').value.trim();
+  const q   = document.getElementById('qualitySelect').value;
+  if (!key) return;
+
+  streamKey = key;
+  quality   = q;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ streamKey: key, quality: q }));
+  showReadyScreen();
+}
+
+function loadSetup() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (saved.streamKey) {
+      streamKey = saved.streamKey;
+      quality   = saved.quality || 'hd';
+      document.getElementById('streamKeyInput').value = saved.streamKey;
+      document.getElementById('qualitySelect').value  = saved.quality || 'hd';
+      document.getElementById('saveBtn').disabled = false;
+      showReadyScreen();
+    }
+  } catch(e) {}
+}
+
+function showReadyScreen() {
+  document.getElementById('setupScreen').classList.remove('active');
+  document.getElementById('readyScreen').classList.add('active');
+  document.getElementById('keyDisplay').textContent = streamKey;
+}
+
+function goToSetup() {
+  if (isLive) { toast('Stop streaming before changing settings'); return; }
+  document.getElementById('readyScreen').classList.remove('active');
+  document.getElementById('setupScreen').classList.add('active');
+}
+
+// ── STREAM CONTROL ─────────────────────────────────────────────────────────
+async function toggleStream() {
+  if (isLive) {
+    await stopStream();
+  } else {
+    await startStream();
+  }
+}
+
+async function startStream() {
+  if (!streamKey) { toast('Set your stream key first'); return; }
+
+  setStatus('connecting', 'Connecting…');
+  document.getElementById('recordBtn').classList.add('live');
+  document.getElementById('recordIcon').textContent = '■';
+  document.getElementById('recordLabel').textContent = 'CONNECTING…';
+
+  const preset = QUALITY_PRESETS[quality] || QUALITY_PRESETS.hd;
+  const url    = `${RTMP_SERVER}/${streamKey}`;
+
+  if (RtmpStream) {
+    // Native Android RTMP push
+    try {
+      await RtmpStream.startStream({
+        url,
+        width:   preset.width,
+        height:  preset.height,
+        fps:     preset.fps,
+        bitrate: preset.bitrate
+      });
+    } catch(e) {
+      setStatus('error', 'Failed to start');
+      resetRecordBtn();
+    }
+  } else {
+    // Web preview mode (browser testing)
+    simulateStream();
+  }
+}
+
+async function stopStream() {
+  isLive = false;
+  if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
+
+  if (RtmpStream) {
+    await RtmpStream.stopStream();
+  }
+
+  resetRecordBtn();
+  setStatus('', 'Ready');
+  document.getElementById('duration').classList.add('hidden');
+  document.getElementById('statsBar').style.opacity = '0';
+  toast('Stream ended');
+}
+
+function flipCamera() {
+  if (RtmpStream) RtmpStream.flipCamera();
+  toast('Camera flipped');
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  const btn = document.getElementById('muteBtn');
+  btn.textContent = isMuted ? '🔇' : '🎤';
+  btn.classList.toggle('active', isMuted);
+  if (RtmpStream) RtmpStream.muteAudio();
+  toast(isMuted ? 'Muted' : 'Unmuted');
+}
+
+// ── STREAM EVENTS ──────────────────────────────────────────────────────────
+function handleStreamEvent(event) {
+  if (event.status === 'connected') {
+    isLive = true;
+    setStatus('live', '🔴 LIVE');
+    document.getElementById('recordLabel').textContent = 'TAP TO STOP';
+    document.getElementById('recordLabel').classList.add('live');
+    document.getElementById('duration').classList.remove('hidden');
+    startTime = Date.now();
+    durationTimer = setInterval(updateDuration, 1000);
+    document.getElementById('statsBar').style.opacity = '1';
+    toast('You are live!');
+  } else if (event.status === 'failed') {
+    isLive = false;
+    setStatus('error', 'Connection failed');
+    resetRecordBtn();
+    toast('Connection failed — check your signal');
+  } else if (event.status === 'disconnected') {
+    isLive = false;
+    setStatus('', 'Disconnected');
+    resetRecordBtn();
+    if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
+  } else if (event.status === 'stats') {
+    updateStats(event.bitrate, event.fps);
+  }
+}
+
+// ── UI HELPERS ─────────────────────────────────────────────────────────────
+function resetRecordBtn() {
+  document.getElementById('recordBtn').classList.remove('live');
+  document.getElementById('recordIcon').textContent = '●';
+  document.getElementById('recordLabel').textContent = 'TAP TO GO LIVE';
+  document.getElementById('recordLabel').classList.remove('live');
+}
+
+function setStatus(state, text) {
+  const dot  = document.getElementById('statusDot');
+  const span = document.getElementById('statusText');
+  dot.className  = 'status-dot' + (state ? ' ' + state : '');
+  span.textContent = text;
+}
+
+function updateDuration() {
+  if (!startTime) return;
+  const secs  = Math.floor((Date.now() - startTime) / 1000);
+  const h     = Math.floor(secs / 3600).toString().padStart(2,'0');
+  const m     = Math.floor((secs % 3600) / 60).toString().padStart(2,'0');
+  const s     = (secs % 60).toString().padStart(2,'0');
+  document.getElementById('duration').textContent = `${h}:${m}:${s}`;
+}
+
+function updateStats(bitrate, fps) {
+  const kbps = Math.round(bitrate / 1024);
+  document.getElementById('statBitrate').textContent = kbps;
+  document.getElementById('statFps').textContent     = fps;
+
+  // Update quality bar
+  const bar = document.getElementById('qualityBar');
+  bar.className = 'quality-bar';
+  if (kbps < 200)      bar.classList.add('bad');
+  else if (kbps < 600) bar.classList.add('poor');
+}
+
+// ── BROWSER SIMULATION (for testing without native) ──────────────────────
+function simulateStream() {
+  setTimeout(() => {
+    handleStreamEvent({ status: 'connected' });
+    setInterval(() => {
+      handleStreamEvent({ status: 'stats', bitrate: 1200 * 1024, fps: 30 });
+    }, 2000);
+  }, 1500);
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────────────
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+loadSetup();
+</script>
+</body>
+</html>
