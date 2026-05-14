@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>StreamPal Broadcaster</title>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:      #06080a;
+      --bg2:     #0d1014;
+      --sp:      #2563eb;
+      --sp2:     #1d4ed8;
+      --bp:      #7c3aed;
+      --bp2:     #6d28d9;
+      --live:    #ef4444;
+      --live2:   #b91c1c;
+      --green:   #22c55e;
+      --text:    #f1f5f9;
+      --text2:   #64748b;
+      --border:  rgba(255,255,255,0.08);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .screen {
+      position: absolute; inset: 0;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 24px; gap: 0;
+    }
+    .screen.active { display: flex; }
+
+    /* ── SETUP SCREEN ── */
+    #setupScreen { gap: 20px; }
+    .sp-logo { font-size: 28px; font-weight: 800; letter-spacing: -.5px; color: var(--text); margin-bottom: 2px; }
+    .sp-logo span { color: #60a5fa; }
+    .pp-brand { font-size: 10px; color: var(--text2); letter-spacing: .14em; text-transform: uppercase; opacity: .55; }
+    .sp-tagline { font-size: 13px; color: var(--text2); text-align: center; line-height: 1.5; }
+    .setup-card {
+      width: 100%; max-width: 340px;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 24px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text2); }
+    .field input {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 10px;
+      padding: 12px 14px; font-size: 15px; width: 100%;
+    }
+    .field input:focus { outline: none; border-color: var(--sp); }
+    .field input::placeholder { color: var(--text2); }
+    .server-badge {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px;
+      font-size: 12px; color: var(--text2);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .server-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+
+    /* MODE TOGGLE */
+    .mode-toggle {
+      display: flex; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .mode-btn {
+      flex: 1; padding: 10px 8px; font-size: 12px; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+      border: none; background: transparent; color: var(--text2);
+      transition: background .15s, color .15s;
+    }
+    .mode-btn.active-sp { background: var(--sp); color: #fff; }
+    .mode-btn.active-bp { background: var(--bp); color: #fff; }
+
+    .btn-primary {
+      width: 100%; padding: 16px;
+      background: var(--sp); color: #fff;
+      border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 700;
+      letter-spacing: .05em; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-primary.bp-mode { background: var(--bp); }
+    .btn-primary:active { opacity: .85; }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+    .setup-footer { font-size: 10px; color: var(--text2); opacity: .4; text-align: center; letter-spacing: .08em; text-transform: uppercase; }
+
+    /* ── READY SCREEN ── */
+    #readyScreen { justify-content: space-between; padding: 48px 24px 48px; }
+    .ready-header { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .ready-logo { font-size: 20px; font-weight: 800; color: var(--text); }
+    .ready-logo span.sp-color { color: #60a5fa; }
+    .ready-logo span.bp-color { color: #a78bfa; }
+    .ready-pp { font-size: 9px; color: var(--text2); letter-spacing: .14em; text-transform: uppercase; opacity: .45; }
+    .stream-key-label { font-size: 11px; color: var(--text2); font-family: monospace; letter-spacing: .05em; margin-top: 2px; }
+    .mode-badge {
+      font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 20px; margin-top: 4px;
+    }
+    .mode-badge.sp { background: rgba(37,99,235,0.2); color: #60a5fa; border: 1px solid rgba(37,99,235,0.3); }
+    .mode-badge.bp { background: rgba(124,58,237,0.2); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); }
+
+    /* RECORD BUTTON */
+    .record-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+    .record-btn {
+      width: 140px; height: 140px; border-radius: 50%;
+      border: 4px solid rgba(255,255,255,0.1);
+      background: var(--sp);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: transform .1s, background .2s;
+    }
+    .record-btn.bp-ready { background: var(--bp); }
+    .record-btn:active { transform: scale(.95); }
+    .record-btn.live {
+      background: var(--live);
+      box-shadow: 0 0 0 16px rgba(239,68,68,0.15);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%,100% { box-shadow: 0 0 0 16px rgba(239,68,68,0.15); }
+      50%      { box-shadow: 0 0 0 28px rgba(239,68,68,0.05); }
+    }
+    .record-icon { font-size: 48px; line-height: 1; }
+    .record-label { font-size: 15px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text2); }
+    .record-label.live { color: var(--live); }
+
+    .btn-stop {
+      display: none;
+      width: 100%; max-width: 220px;
+      padding: 14px;
+      background: rgba(239,68,68,0.15);
+      color: var(--live);
+      border: 1px solid rgba(239,68,68,0.4);
+      border-radius: 12px;
+      font-size: 15px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-stop:active { background: rgba(239,68,68,0.3); }
+    .btn-stop.visible { display: block; }
+
+    .status-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text2); transition: background .3s; }
+    .status-dot.live { background: var(--live); animation: dot-pulse 1s infinite; }
+    .status-dot.connecting { background: #f59e0b; animation: dot-pulse .5s infinite; }
+    .status-dot.error { background: var(--live); }
+    @keyframes dot-pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+    .controls-bar { display: flex; gap: 16px; align-items: center; }
+    .ctrl-btn {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--bg2); border: 1px solid var(--border);
+      font-size: 22px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .ctrl-btn:active { background: rgba(255,255,255,0.1); }
+    .ctrl-btn.active { background: rgba(239,68,68,0.15); border-color: var(--live); }
+
+    .stats-bar { display: flex; gap: 20px; font-size: 11px; color: var(--text2); font-family: monospace; }
+    .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .stat-val { font-size: 15px; font-weight: 700; color: var(--text); }
+
+    .duration { font-size: 32px; font-weight: 800; font-family: 'SF Mono', monospace; color: var(--text); letter-spacing: .05em; }
+    .duration.hidden { opacity: 0; }
+
+    .settings-link { position: absolute; top: 16px; right: 16px; font-size: 22px; cursor: pointer; opacity: .4; }
+    .settings-link:active { opacity: 1; }
+
+    .quality-bar { display: flex; gap: 3px; align-items: flex-end; height: 16px; }
+    .quality-bar div { width: 4px; border-radius: 2px; background: var(--green); transition: opacity .3s; }
+    .quality-bar div:nth-child(1) { height: 5px; }
+    .quality-bar div:nth-child(2) { height: 9px; }
+    .quality-bar div:nth-child(3) { height: 13px; }
+    .quality-bar div:nth-child(4) { height: 16px; }
+    .quality-bar.poor div:nth-child(3), .quality-bar.poor div:nth-child(4) { opacity: .2; background: #f59e0b; }
+    .quality-bar.poor div:nth-child(1), .quality-bar.poor div:nth-child(2) { background: #f59e0b; }
+    .quality-bar.bad div { background: var(--live); }
+    .quality-bar.bad div:nth-child(2), .quality-bar.bad div:nth-child(3), .quality-bar.bad div:nth-child(4) { opacity: .2; }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 10px 20px; font-size: 13px; color: var(--text);
+      opacity: 0; transition: opacity .25s; pointer-events: none;
+      white-space: nowrap; z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- ── SETUP SCREEN ── -->
+<div class="screen active" id="setupScreen">
+  <div class="sp-logo">Stream<span>Pal</span></div>
+  <div class="pp-brand">A Peak Platforms Product</div>
+  <div class="sp-tagline">Enter your client code and stream key.<br>You only need to do this once.</div>
+
+  <div class="setup-card">
+
+    <div class="field">
+      <label>Mode</label>
+      <div class="mode-toggle">
+        <button class="mode-btn active-sp" id="modeStreamPal" onclick="setMode('streampal')">📡 StreamPal</button>
+        <button class="mode-btn" id="modeBroadcastPal" onclick="setMode('broadcastpal')">🎬 BroadcastPal</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Client Code</label>
+      <input type="text" id="clientCodeInput" placeholder="e.g. nmhu, sooners"
+        autocapitalize="none" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>Stream Key</label>
+      <input type="text" id="streamKeyInput" placeholder="e.g. camera1, cam1"
+        autocapitalize="none" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>Streaming Server</label>
+      <div class="server-badge">
+        <div class="server-dot"></div>
+        <span id="serverStatus">Peak Platforms Streaming Server</span>
+      </div>
+    </div>
+    <div class="field" id="qualityField">
+      <label>Video Quality</label>
+      <select id="qualitySelect" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px 14px;font-size:15px;width:100%;">
+        <option value="hd">HD 720p — Recommended</option>
+        <option value="sd">SD 480p — Low Bandwidth</option>
+        <option value="low">Low 360p — Marginal Signal</option>
+      </select>
+    </div>
+    <button class="btn-primary" id="saveBtn" onclick="saveSetup()" disabled>Save & Continue</button>
+  </div>
+  <div class="setup-footer">Peak Platforms · BroadcastPal / StreamPal</div>
+</div>
+
+<!-- ── READY SCREEN ── -->
+<div class="screen" id="readyScreen">
+
+  <div class="settings-link" onclick="goToSetup()">⚙️</div>
+
+  <div class="ready-header">
+    <div class="ready-logo" id="readyLogo">Stream<span class="sp-color">Pal</span></div>
+    <div class="ready-pp">A Peak Platforms Product</div>
+    <div class="stream-key-label" id="keyDisplay"></div>
+    <div class="mode-badge sp" id="modeBadge">Single Cam · RTMP</div>
+  </div>
+
+  <div class="record-wrap">
+    <div class="duration hidden" id="duration">00:00:00</div>
+    <div class="record-btn" id="recordBtn" onclick="toggleStream()">
+      <div class="record-icon" id="recordIcon">●</div>
+    </div>
+    <div class="record-label" id="recordLabel">TAP TO GO LIVE</div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:300px;">
+    <div class="status-row">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Ready</span>
+      <div class="quality-bar" id="qualityBar">
+        <div></div><div></div><div></div><div></div>
+      </div>
+    </div>
+
+    <div class="stats-bar" id="statsBar" style="opacity:0;">
+      <div class="stat">
+        <div class="stat-val" id="statBitrate">—</div>
+        <div>kbps</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="statFps">—</div>
+        <div>fps</div>
+      </div>
+    </div>
+
+    <button class="btn-stop" id="stopBtn" onclick="stopStream()">⬛ Stop Stream</button>
+
+    <div class="controls-bar">
+      <div class="ctrl-btn" id="muteBtn" onclick="toggleMute()" title="Mute">🎤</div>
+      <div class="ctrl-btn" id="flipBtn" onclick="flipCamera()" title="Flip">🔄</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+const SUPA_URL        = 'https://hvqzrdlbtfezwuveincs.supabase.co';
+const SUPA_KEY        = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2cXpyZGxidGZlend1dmVpbmNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyOTA1MTgsImV4cCI6MjA3ODg2NjUxOH0.30_fdpT1hu_m3zyf-8IywXWIozjIDnqv5RHs6T9hCTo';
+const STORAGE_KEY     = 'sp_broadcaster_config';
+const FALLBACK_RTMP   = 'rtmp://157.245.208.49:1935/live';
+const LIVEKIT_URL     = 'ws://104.236.49.138:7880';
+const TOKEN_SERVER    = 'http://104.236.49.138:7882/token';
+
+const QUALITY_PRESETS = {
+  hd:  { width: 1280, height: 720,  fps: 30, bitrate: 1500 * 1024 },
+  sd:  { width: 854,  height: 480,  fps: 24, bitrate: 800  * 1024 },
+  low: { width: 640,  height: 360,  fps: 15, bitrate: 400  * 1024 }
+};
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let isLive        = false;
+let isMuted       = false;
+let streamKey     = '';
+let clientCode    = '';
+let rtmpServer    = FALLBACK_RTMP;
+let quality       = 'hd';
+let mode          = 'streampal'; // 'streampal' | 'broadcastpal'
+let durationTimer = null;
+let startTime     = null;
+let livekitRoom   = null;
+let statsInterval = null;
+let prevBytes     = 0;
+
+// ── CAPACITOR PLUGIN (RTMP) ──────────────────────────────────────────────────
+let RtmpStream = null;
+
+function initPlugin() {
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    RtmpStream = window.Capacitor.Plugins?.RtmpStream || null;
+    if (RtmpStream) RtmpStream.addListener('streamEvent', handleStreamEvent);
+  }
+}
+document.addEventListener('deviceready', initPlugin);
+setTimeout(initPlugin, 300);
+
+// ── MODE SELECTION ───────────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  const spBtn = document.getElementById('modeStreamPal');
+  const bpBtn = document.getElementById('modeBroadcastPal');
+  const saveBtn = document.getElementById('saveBtn');
+  spBtn.className = 'mode-btn' + (m === 'streampal' ? ' active-sp' : '');
+  bpBtn.className = 'mode-btn' + (m === 'broadcastpal' ? ' active-bp' : '');
+  saveBtn.className = 'btn-primary' + (m === 'broadcastpal' ? ' bp-mode' : '');
+  checkInputs();
+}
+
+// ── SUPABASE CONFIG FETCH ────────────────────────────────────────────────────
+async function fetchRtmpUrl(code) {
+  try {
+    const res = await fetch(
+      `${SUPA_URL}/rest/v1/xsen_stations?slug=eq.${encodeURIComponent(code)}&select=rtmp_url`,
+      { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` } }
+    );
+    const data = await res.json();
+    if (data && data[0] && data[0].rtmp_url) return data[0].rtmp_url;
+  } catch(e) {}
+  return FALLBACK_RTMP;
+}
+
+// ── SETUP ────────────────────────────────────────────────────────────────────
+function checkInputs() {
+  const code = document.getElementById('clientCodeInput').value.trim();
+  const key  = document.getElementById('streamKeyInput').value.trim();
+  document.getElementById('saveBtn').disabled = !(code && key);
+}
+document.getElementById('clientCodeInput').addEventListener('input', checkInputs);
+document.getElementById('streamKeyInput').addEventListener('input', checkInputs);
+
+async function saveSetup() {
+  const code = document.getElementById('clientCodeInput').value.trim().toLowerCase();
+  const key  = document.getElementById('streamKeyInput').value.trim();
+  const q    = document.getElementById('qualitySelect').value;
+  if (!code || !key) return;
+
+  document.getElementById('saveBtn').disabled = true;
+  document.getElementById('serverStatus').textContent = 'Connecting to Peak Platforms…';
+
+  const url = await fetchRtmpUrl(code);
+  rtmpServer  = url;
+  streamKey   = key;
+  clientCode  = code;
+  quality     = q;
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ clientCode: code, streamKey: key, quality: q, mode }));
+
+  document.getElementById('serverStatus').textContent = 'Peak Platforms Streaming Server';
+  document.getElementById('saveBtn').disabled = false;
+  showReadyScreen();
+}
+
+async function loadSetup() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (saved.clientCode && saved.streamKey) {
+      clientCode = saved.clientCode;
+      streamKey  = saved.streamKey;
+      quality    = saved.quality || 'hd';
+      mode       = saved.mode || 'streampal';
+      document.getElementById('clientCodeInput').value = saved.clientCode;
+      document.getElementById('streamKeyInput').value  = saved.streamKey;
+      document.getElementById('qualitySelect').value   = saved.quality || 'hd';
+      document.getElementById('saveBtn').disabled = false;
+      setMode(mode);
+      rtmpServer = await fetchRtmpUrl(clientCode);
+      showReadyScreen();
+    }
+  } catch(e) {}
+}
+
+function showReadyScreen() {
+  document.getElementById('setupScreen').classList.remove('active');
+  document.getElementById('readyScreen').classList.add('active');
+  document.getElementById('keyDisplay').textContent = `${clientCode} · ${streamKey}`;
+
+  const logo  = document.getElementById('readyLogo');
+  const badge = document.getElementById('modeBadge');
+  const btn   = document.getElementById('recordBtn');
+
+  if (mode === 'broadcastpal') {
+    logo.innerHTML  = 'Broadcast<span class="bp-color">Pal</span>';
+    badge.textContent = 'Multi Cam · WebRTC';
+    badge.className = 'mode-badge bp';
+    btn.classList.add('bp-ready');
+  } else {
+    logo.innerHTML  = 'Stream<span class="sp-color">Pal</span>';
+    badge.textContent = 'Single Cam · RTMP';
+    badge.className = 'mode-badge sp';
+    btn.classList.remove('bp-ready');
+  }
+
+  document.getElementById('flipBtn').style.display = (mode === 'broadcastpal') ? 'none' : 'flex';
+}
+
+function goToSetup() {
+  if (isLive) { toast('Stop streaming before changing settings'); return; }
+  document.getElementById('readyScreen').classList.remove('active');
+  document.getElementById('setupScreen').classList.add('active');
+}
+
+// ── STREAM CONTROL ───────────────────────────────────────────────────────────
+async function toggleStream() {
+  if (!isLive) await startStream();
+}
+
+async function startStream() {
+  if (!streamKey) { toast('Set your stream key first'); return; }
+  setStatus('connecting', 'Connecting…');
+  document.getElementById('recordBtn').classList.add('live');
+  document.getElementById('recordIcon').textContent = '■';
+  document.getElementById('recordLabel').textContent = 'CONNECTING…';
+
+  if (mode === 'broadcastpal') {
+    await startWebRTC();
+  } else {
+    await startRTMP();
+  }
+}
+
+// ── RTMP MODE ────────────────────────────────────────────────────────────────
+async function startRTMP() {
+  const preset = QUALITY_PRESETS[quality] || QUALITY_PRESETS.hd;
+  const url    = `${rtmpServer}/${streamKey}`;
+
+  if (RtmpStream) {
+    try {
+      await RtmpStream.startStream({ url, width: preset.width, height: preset.height, fps: preset.fps, bitrate: preset.bitrate });
+    } catch(e) {
+      setStatus('error', 'Failed to start');
+      resetRecordBtn();
+    }
+  } else {
+    simulateStream();
+  }
+}
+
+// ── WEBRTC MODE (LIVEKIT) ────────────────────────────────────────────────────
+async function startWebRTC() {
+  try {
+    // Fetch token
+    const res = await fetch(TOKEN_SERVER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ room: clientCode, identity: streamKey })
+    });
+    const { token } = await res.json();
+    if (!token) throw new Error('No token received');
+
+    // Connect to LiveKit room
+    livekitRoom = new LivekitClient.Room({
+      adaptiveStream: true,
+      dynacast: true,
+    });
+
+    livekitRoom.on(LivekitClient.RoomEvent.Connected, () => {
+      handleStreamEvent({ status: 'connected' });
+    });
+
+    livekitRoom.on(LivekitClient.RoomEvent.Disconnected, () => {
+      if (isLive) handleStreamEvent({ status: 'disconnected' });
+    });
+
+    livekitRoom.on(LivekitClient.RoomEvent.ConnectionStateChanged, (state) => {
+      if (state === LivekitClient.ConnectionState.Reconnecting) {
+        setStatus('connecting', 'Reconnecting…');
+      }
+    });
+
+    await livekitRoom.connect(LIVEKIT_URL, token);
+    await livekitRoom.localParticipant.setCameraEnabled(true);
+    await livekitRoom.localParticipant.setMicrophoneEnabled(true);
+
+    // Start stats polling
+    startWebRTCStats();
+
+  } catch(e) {
+    console.error('WebRTC error:', e);
+    setStatus('error', 'Connection failed');
+    resetRecordBtn();
+    toast('WebRTC connection failed — check signal');
+  }
+}
+
+function startWebRTCStats() {
+  statsInterval = setInterval(async () => {
+    if (!livekitRoom || !isLive) return;
+    try {
+      const tracks = livekitRoom.localParticipant.videoTrackPublications;
+      let fps = 0, kbps = 0;
+      for (const [, pub] of tracks) {
+        if (pub.track) {
+          const stats = await pub.track.getRTCStatsReport?.();
+          if (stats) {
+            for (const stat of stats.values()) {
+              if (stat.type === 'outbound-rtp' && stat.kind === 'video') {
+                const bytes = stat.bytesSent || 0;
+                kbps = Math.round(((bytes - prevBytes) * 8) / 1000);
+                prevBytes = bytes;
+                fps = Math.round(stat.framesPerSecond || 0);
+              }
+            }
+          }
+        }
+      }
+      updateStats(kbps * 1024, fps);
+    } catch(e) {}
+  }, 2000);
+}
+
+async function stopStream() {
+  isLive = false;
+  if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
+  if (statsInterval) { clearInterval(statsInterval); statsInterval = null; }
+
+  if (mode === 'broadcastpal' && livekitRoom) {
+    await livekitRoom.disconnect();
+    livekitRoom = null;
+    prevBytes = 0;
+  } else if (RtmpStream) {
+    await RtmpStream.stopStream();
+  }
+
+  resetRecordBtn();
+  setStatus('', 'Ready');
+  document.getElementById('duration').classList.add('hidden');
+  document.getElementById('statsBar').style.opacity = '0';
+  document.getElementById('stopBtn').classList.remove('visible');
+  toast('Stream ended');
+}
+
+function flipCamera() {
+  if (mode === 'broadcastpal') return;
+  if (RtmpStream) RtmpStream.flipCamera();
+  toast('Camera flipped');
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  const btn = document.getElementById('muteBtn');
+  btn.textContent = isMuted ? '🔇' : '🎤';
+  btn.classList.toggle('active', isMuted);
+  if (mode === 'broadcastpal' && livekitRoom) {
+    livekitRoom.localParticipant.setMicrophoneEnabled(!isMuted);
+  } else if (RtmpStream) {
+    RtmpStream.muteAudio();
+  }
+  toast(isMuted ? 'Muted' : 'Unmuted');
+}
+
+// ── STREAM EVENTS ────────────────────────────────────────────────────────────
+function handleStreamEvent(event) {
+  if (event.status === 'connected') {
+    isLive = true;
+    setStatus('live', '🔴 LIVE');
+    document.getElementById('recordLabel').textContent = 'LIVE';
+    document.getElementById('recordLabel').classList.add('live');
+    document.getElementById('duration').classList.remove('hidden');
+    document.getElementById('stopBtn').classList.add('visible');
+    startTime = Date.now();
+    durationTimer = setInterval(updateDuration, 1000);
+    document.getElementById('statsBar').style.opacity = '1';
+    toast(mode === 'broadcastpal' ? 'Camera live in room!' : 'You are live!');
+  } else if (event.status === 'failed') {
+    isLive = false;
+    setStatus('error', 'Connection failed');
+    resetRecordBtn();
+    document.getElementById('stopBtn').classList.remove('visible');
+    toast('Connection failed — check your signal');
+  } else if (event.status === 'disconnected') {
+    isLive = false;
+    setStatus('', 'Disconnected');
+    resetRecordBtn();
+    document.getElementById('stopBtn').classList.remove('visible');
+    if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
+  } else if (event.status === 'stats') {
+    updateStats(event.bitrate, event.fps);
+  }
+}
+
+// ── UI HELPERS ───────────────────────────────────────────────────────────────
+function resetRecordBtn() {
+  const btn = document.getElementById('recordBtn');
+  btn.classList.remove('live');
+  if (mode === 'broadcastpal') btn.classList.add('bp-ready');
+  document.getElementById('recordIcon').textContent = '●';
+  document.getElementById('recordLabel').textContent = 'TAP TO GO LIVE';
+  document.getElementById('recordLabel').classList.remove('live');
+}
+
+function setStatus(state, text) {
+  const dot  = document.getElementById('statusDot');
+  const span = document.getElementById('statusText');
+  dot.className    = 'status-dot' + (state ? ' ' + state : '');
+  span.textContent = text;
+}
+
+function updateDuration() {
+  if (!startTime) return;
+  const secs = Math.floor((Date.now() - startTime) / 1000);
+  const h    = Math.floor(secs / 3600).toString().padStart(2,'0');
+  const m    = Math.floor((secs % 3600) / 60).toString().padStart(2,'0');
+  const s    = (secs % 60).toString().padStart(2,'0');
+  document.getElementById('duration').textContent = `${h}:${m}:${s}`;
+}
+
+function updateStats(bitrate, fps) {
+  const kbps = Math.round(bitrate / 1024);
+  document.getElementById('statBitrate').textContent = kbps || '—';
+  document.getElementById('statFps').textContent     = fps  || '—';
+  const bar = document.getElementById('qualityBar');
+  bar.className = 'quality-bar';
+  if (kbps < 200)      bar.classList.add('bad');
+  else if (kbps < 600) bar.classList.add('poor');
+}
+
+function simulateStream() {
+  setTimeout(() => {
+    handleStreamEvent({ status: 'connected' });
+    setInterval(() => {
+      handleStreamEvent({ status: 'stats', bitrate: 1200 * 1024, fps: 30 });
+    }, 2000);
+  }, 1500);
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+loadSetup();
+</script>
+</body>
+</html>
