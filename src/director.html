@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BroadcastPal — Director Console</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080909;--bg2:#0f1011;--bg3:#181a1b;--bg4:#202325;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e8e8e8;--text2:#7a7e82;--text3:#3e4245;
+  --accent:#e8302a;--live:#22c55e;--webrtc:#7c3aed;
+  --font-head:'Bebas Neue',sans-serif;--font-mono:'DM Mono',monospace;--font-body:'DM Sans',sans-serif;--r:6px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);min-height:100vh;display:flex;flex-direction:column;}
+
+header{height:48px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;}
+.logo{font-family:var(--font-head);font-size:22px;letter-spacing:.12em;}
+.logo em{color:var(--accent);font-style:normal;}
+.logo-sub{font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:.2em;margin-left:10px;vertical-align:middle;}
+.header-right{display:flex;align-items:center;gap:14px;}
+.conn-pill{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--text2);}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);transition:background .3s;}
+.conn-dot.live{background:var(--live);box-shadow:0 0 6px var(--live);}
+.btn-sm{background:none;border:1px solid var(--border2);color:var(--text2);font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;padding:5px 10px;border-radius:var(--r);cursor:pointer;transition:all .15s;}
+.btn-sm:hover{border-color:var(--text2);color:var(--text);}
+
+.on-air-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.oab-label{font-family:var(--font-head);font-size:11px;letter-spacing:.18em;color:var(--text3);white-space:nowrap;}
+.oab-status{font-family:var(--font-mono);font-size:13px;color:var(--text2);flex:1;}
+.oab-status.live{color:var(--live);display:flex;align-items:center;gap:8px;}
+.oab-status.webrtc-live{color:var(--webrtc);display:flex;align-items:center;gap:8px;}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--live);animation:pulse 1.4s ease-in-out infinite;}
+.pulse-rtc{width:8px;height:8px;border-radius:50%;background:var(--webrtc);animation:pulse 1.4s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.85)}}
+.btn-stop{display:none;font-family:var(--font-head);font-size:12px;letter-spacing:.08em;padding:6px 14px;background:#3f0d0b;color:#fca5a5;border:1px solid #7f1d1d;border-radius:var(--r);cursor:pointer;}
+.btn-stop:hover{background:#5b1210;}
+
+/* CONNECT BAR */
+.connect-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;}
+.cb-label{font-family:var(--font-head);font-size:11px;letter-spacing:.14em;color:var(--text3);white-space:nowrap;}
+.lk-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);transition:background .3s;flex-shrink:0;}
+.lk-dot.connected{background:var(--webrtc);box-shadow:0 0 6px var(--webrtc);}
+.cb-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--r);padding:6px 10px;font-family:var(--font-mono);font-size:12px;}
+.cb-input:focus{outline:none;border-color:rgba(124,58,237,.5);}
+.cb-input::placeholder{color:var(--text3);}
+.cb-input-sm{width:60px;}
+.cb-input-room{width:140px;}
+.cb-label-sm{font-family:var(--font-mono);font-size:10px;color:var(--text3);white-space:nowrap;}
+.btn-connect{font-family:var(--font-head);font-size:11px;letter-spacing:.1em;padding:6px 14px;background:var(--bg3);border:1px solid rgba(124,58,237,.4);color:#a78bfa;border-radius:var(--r);cursor:pointer;white-space:nowrap;}
+.btn-connect:hover{background:rgba(124,58,237,.15);}
+.btn-connect.connected{border-color:rgba(124,58,237,.6);background:rgba(124,58,237,.1);}
+.cb-status{font-family:var(--font-mono);font-size:11px;color:var(--text3);}
+
+.comms-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.comms-label{font-family:var(--font-head);font-size:11px;letter-spacing:.14em;color:var(--text3);white-space:nowrap;}
+.comms-select{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:var(--r);padding:6px 8px;font-family:var(--font-mono);font-size:11px;}
+.comms-input{flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--r);padding:7px 12px;font-family:var(--font-body);font-size:13px;min-width:0;}
+.comms-input:focus{outline:none;border-color:rgba(232,48,42,.4);}
+.comms-input::placeholder{color:var(--text3);}
+.btn-send{font-family:var(--font-head);font-size:12px;letter-spacing:.1em;padding:7px 16px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:var(--r);cursor:pointer;white-space:nowrap;}
+.btn-send:hover{border-color:var(--accent);color:var(--accent);}
+.comms-log{background:var(--bg);border-bottom:1px solid var(--border);padding:0 20px;max-height:52px;overflow-y:auto;flex-shrink:0;}
+.log-item{font-family:var(--font-mono);font-size:10px;color:var(--text3);padding:3px 0;}
+.log-target{color:var(--accent);}
+.log-msg{color:var(--text2);}
+
+.main{display:flex;flex:1;gap:0;overflow:hidden;}
+
+.program-monitor{width:340px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.pm-label{font-family:var(--font-head);font-size:10px;letter-spacing:.2em;color:var(--text3);padding:10px 14px 6px;border-bottom:1px solid var(--border);}
+.pm-video-wrap{position:relative;aspect-ratio:16/9;background:#000;overflow:hidden;}
+.pm-video-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+.pm-offline{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;}
+.pm-offline-icon{font-size:28px;opacity:.2;}
+.pm-offline-text{font-family:var(--font-head);font-size:11px;letter-spacing:.2em;color:var(--text3);}
+.pm-badge{position:absolute;top:8px;left:8px;color:#fff;font-family:var(--font-head);font-size:9px;letter-spacing:.12em;padding:3px 8px;border-radius:3px;}
+.pm-badge.hls{background:var(--accent);}
+.pm-badge.webrtc{background:var(--webrtc);}
+.pm-info{padding:10px 14px;font-family:var(--font-mono);font-size:11px;color:var(--text2);}
+
+.feed-panel{flex:1;overflow-y:auto;padding:12px;}
+.feed-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+
+.section-divider{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:4px 0;}
+.section-divider-line{flex:1;height:1px;background:var(--border);}
+.section-divider-label{font-family:var(--font-head);font-size:9px;letter-spacing:.2em;color:var(--text3);white-space:nowrap;}
+
+.cam-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .2s,box-shadow .2s;}
+.cam-card:hover{border-color:var(--border2);}
+.cam-card.on-air{border-color:var(--live);box-shadow:0 0 20px rgba(34,197,94,.1);}
+.cam-card.on-air-rtc{border-color:var(--webrtc);box-shadow:0 0 20px rgba(124,58,237,.15);}
+.cam-video-wrap{position:relative;aspect-ratio:16/9;background:#000;overflow:hidden;}
+.cam-video-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+.cam-no-preview{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:var(--bg3);}
+.cam-no-preview-icon{font-size:20px;opacity:.3;}
+.cam-no-preview-text{font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:.1em;}
+.cam-badge-onair{position:absolute;top:6px;left:6px;background:var(--live);color:#000;font-family:var(--font-head);font-size:8px;font-weight:700;letter-spacing:.12em;padding:2px 6px;border-radius:3px;}
+.cam-badge-onair.rtc{background:var(--webrtc);color:#fff;}
+.cam-badge-type{position:absolute;bottom:6px;left:6px;font-family:var(--font-mono);font-size:8px;padding:2px 5px;border-radius:3px;letter-spacing:.08em;}
+.cam-badge-type.hls{background:rgba(232,48,42,.2);color:#fca5a5;border:1px solid rgba(232,48,42,.3);}
+.cam-badge-type.webrtc{background:rgba(124,58,237,.2);color:#c4b5fd;border:1px solid rgba(124,58,237,.3);}
+.cam-badge-num{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.7);color:var(--text2);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:3px;}
+.cam-body{padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.cam-name{font-family:var(--font-mono);font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.btn-cut{font-family:var(--font-head);font-size:11px;letter-spacing:.08em;padding:5px 12px;border-radius:var(--r);border:none;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;}
+.btn-cut.can-cut{background:var(--live);color:#000;}
+.btn-cut.can-cut-rtc{background:var(--webrtc);color:#fff;}
+.btn-cut.can-cut:hover,.btn-cut.can-cut-rtc:hover{opacity:.85;}
+.btn-cut.is-live{background:#166534;color:#86efac;cursor:default;}
+.btn-cut.is-live-rtc{background:#3b0764;color:#c4b5fd;cursor:default;}
+
+.empty-state{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:10px;}
+.empty-icon{font-size:28px;opacity:.2;}
+.empty-title{font-family:var(--font-head);font-size:13px;letter-spacing:.2em;color:var(--text3);}
+
+.bottom-bar{background:var(--bg2);border-top:1px solid var(--border);padding:7px 20px;display:flex;align-items:center;gap:20px;flex-shrink:0;flex-wrap:wrap;}
+.bb-stat{font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:.06em;}
+.bb-stat span{color:var(--text2);}
+
+#prebuffer{position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:10px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);z-index:999;opacity:0;transform:translateY(6px);transition:all .25s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="logo">Broadcast<em>Pal</em></span>
+    <span class="logo-sub">Director Console</span>
+  </div>
+  <div class="header-right">
+    <div class="conn-pill">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connLabel">Connecting…</span>
+    </div>
+    <button class="btn-sm" onclick="refreshAll()">↻ REFRESH</button>
+  </div>
+</header>
+
+<div class="on-air-bar">
+  <span class="oab-label">Program Out →</span>
+  <div class="oab-status" id="oabStatus">Offline</div>
+  <button class="btn-stop" id="stopBtn" onclick="stopBroadcast()">⬛ Stop Broadcast</button>
+</div>
+
+<div class="connect-bar">
+  <span class="cb-label">🎬 Room</span>
+  <div class="lk-dot" id="lkDot"></div>
+  <input class="cb-input cb-input-room" id="lkRoomInput" type="text" placeholder="Client code (e.g. nmhu)" autocapitalize="none" autocorrect="off">
+  <span class="cb-label-sm">Max previews:</span>
+  <input class="cb-input cb-input-sm" id="maxPreviewsInput" type="number" value="6" min="1" max="20">
+  <button class="btn-connect" id="lkConnectBtn" onclick="toggleLiveKit()">CONNECT</button>
+  <span class="cb-status" id="lkStatus">Not connected · HLS feeds always visible</span>
+</div>
+
+<div class="comms-bar">
+  <span class="comms-label">📢 MSG</span>
+  <select class="comms-select" id="commsTarget">
+    <option value="all">All Operators</option>
+    <option value="cam1">CAM 1</option>
+    <option value="cam2">CAM 2</option>
+    <option value="cam3">CAM 3</option>
+    <option value="cam4">CAM 4</option>
+  </select>
+  <input class="comms-input" id="commsInput" type="text" placeholder="Message to operators…" maxlength="80" onkeydown="if(event.key==='Enter') sendComms()">
+  <button class="btn-send" onclick="sendComms()">SEND ➤</button>
+</div>
+<div class="comms-log" id="commsLog"></div>
+
+<div class="main">
+  <div class="program-monitor">
+    <div class="pm-label">PROGRAM MONITOR</div>
+    <div class="pm-video-wrap" id="pmWrap">
+      <div class="pm-offline" id="pmOffline">
+        <div class="pm-offline-icon">📺</div>
+        <div class="pm-offline-text">No Program Selected</div>
+      </div>
+      <div class="pm-badge hls" id="pmBadge" style="display:none;">● PROGRAM</div>
+    </div>
+    <div class="pm-info" id="pmInfo">Select a camera to go to air</div>
+  </div>
+  <div class="feed-panel">
+    <div class="feed-grid" id="feedGrid"></div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <span class="bb-stat">HLS: <span id="streamCount">0</span></span>
+  <span class="bb-stat">WebRTC: <span id="rtcCount">0</span></span>
+  <span class="bb-stat">Room: <span id="roomLabel">—</span></span>
+  <span class="bb-stat">Max Previews: <span id="previewCapLabel">6</span></span>
+  <span class="bb-stat" id="lastPoll">POLLED: <span>—</span></span>
+</div>
+
+<div id="prebuffer"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const NGINX_BASE  = 'https://live.xsen.fun:8443';
+const SUPA        = 'https://hvqzrdlbtfezwuveincs.supabase.co';
+const SKEY        = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2cXpyZGxidGZlend1dmVpbmNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyOTA1MTgsImV4cCI6MjA3ODg2NjUxOH0.30_fdpT1hu_m3zyf-8IywXWIozjIDnqv5RHs6T9hCTo';
+const SCHOOL      = 'OU';
+const POLL_MS     = 6000;
+const LIVEKIT_URL = 'wss://livekit.streampal.fun:7880';
+const TOKEN_URL   = 'https://livekit.streampal.fun/token';
+
+let featuredKey = null, featuredType = null;
+let liveStreams = new Set(), allStreamKeys = [];
+let hlsPlayers = {}, cardPlayers = {};
+let livekitRoom = null, lkParticipants = {}, lkConnected = false;
+let currentRoom = '', maxPreviews = 6;
+let previewCount = 0; // tracks how many video previews are active
+
+// ── SUPABASE ──────────────────────────────────────────────────────────────────
+async function patchSupabase(hlsUrl) {
+  try {
+    const r = await fetch(`${SUPA}/rest/v1/xsen_stations?school=eq.${SCHOOL}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'apikey': SKEY, 'Authorization': `Bearer ${SKEY}`, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ hls_stream_url: hlsUrl })
+    });
+    return r.ok;
+  } catch(e) { toast('⚠ Supabase error'); return false; }
+}
+
+// ── HLS ───────────────────────────────────────────────────────────────────────
+function makeHls(videoEl, key) {
+  const url = `${NGINX_BASE}/hls/${key}/index.m3u8`;
+  const hls = new Hls({ lowLatencyMode: false, maxBufferLength: 30, liveSyncDurationCount: 3, liveMaxLatencyDurationCount: 6, manifestLoadingTimeOut: 10000, manifestLoadingMaxRetry: 8, fragLoadingMaxRetry: 8 });
+  hls.loadSource(url);
+  hls.attachMedia(videoEl);
+  hls.on(Hls.Events.MANIFEST_PARSED, () => videoEl.play().catch(()=>{}));
+  hls.on(Hls.Events.ERROR, (e, d) => { if (d.fatal) { if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad(); else hls.destroy(); }});
+  return hls;
+}
+
+function ensurePrebuffered(key) {
+  if (hlsPlayers[key] || !Hls.isSupported()) return;
+  const buf = document.getElementById('prebuffer');
+  const vid = document.createElement('video');
+  vid.id = `prebuf-${key}`; vid.muted = true; vid.autoplay = true; vid.playsInline = true;
+  buf.appendChild(vid);
+  hlsPlayers[key] = makeHls(vid, key);
+}
+
+function destroyPrebuffer(key) {
+  if (hlsPlayers[key]) { hlsPlayers[key].destroy(); delete hlsPlayers[key]; }
+  const el = document.getElementById(`prebuf-${key}`);
+  if (el) el.remove();
+}
+
+// ── LIVEKIT ───────────────────────────────────────────────────────────────────
+async function toggleLiveKit() {
+  lkConnected ? await disconnectLiveKit() : await connectLiveKit();
+}
+
+async function connectLiveKit() {
+  const room = document.getElementById('lkRoomInput').value.trim().toLowerCase();
+  if (!room) { toast('Enter a room name'); return; }
+  maxPreviews = parseInt(document.getElementById('maxPreviewsInput').value) || 6;
+  document.getElementById('previewCapLabel').textContent = maxPreviews;
+  document.getElementById('lkStatus').textContent = 'Connecting…';
+  document.getElementById('lkConnectBtn').textContent = 'CONNECTING…';
+
+  try {
+    const res = await fetch(TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room, identity: 'director-' + Date.now() }) });
+    const { token } = await res.json();
+    if (!token) throw new Error('No token');
+
+    livekitRoom = new LivekitClient.Room();
+
+    livekitRoom.on(LivekitClient.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+      if (track.kind === LivekitClient.Track.Kind.Video) addLiveKitParticipant(participant.identity, track);
+    });
+    livekitRoom.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+      if (track.kind === LivekitClient.Track.Kind.Video) removeLiveKitParticipant(participant.identity);
+    });
+    livekitRoom.on(LivekitClient.RoomEvent.ParticipantDisconnected, (p) => removeLiveKitParticipant(p.identity));
+    livekitRoom.on(LivekitClient.RoomEvent.Disconnected, () => {
+      lkConnected = false; updateLiveKitUI(false);
+      Object.keys(lkParticipants).forEach(id => removeLiveKitParticipant(id));
+    });
+
+    await livekitRoom.connect(LIVEKIT_URL, token);
+
+    // Subscribe to existing participants
+    livekitRoom.remoteParticipants.forEach(p => {
+      p.trackPublications.forEach(pub => {
+        if (pub.track?.kind === LivekitClient.Track.Kind.Video) addLiveKitParticipant(p.identity, pub.track);
+      });
+    });
+
+    currentRoom = room;
+    lkConnected = true;
+    updateLiveKitUI(true);
+  } catch(e) {
+    console.error(e);
+    document.getElementById('lkStatus').textContent = 'Failed: ' + e.message;
+    document.getElementById('lkConnectBtn').textContent = 'CONNECT';
+    toast('⚠ LiveKit connection failed');
+  }
+}
+
+async function disconnectLiveKit() {
+  if (livekitRoom) { await livekitRoom.disconnect(); livekitRoom = null; }
+  Object.keys(lkParticipants).forEach(id => removeLiveKitParticipant(id));
+  lkParticipants = {}; lkConnected = false; currentRoom = '';
+  updateLiveKitUI(false);
+}
+
+function updateLiveKitUI(connected) {
+  const rtcCount = Object.keys(lkParticipants).length;
+  document.getElementById('lkDot').className = 'lk-dot' + (connected ? ' connected' : '');
+  document.getElementById('lkConnectBtn').textContent = connected ? 'DISCONNECT' : 'CONNECT';
+  document.getElementById('lkConnectBtn').className = 'btn-connect' + (connected ? ' connected' : '');
+  document.getElementById('lkStatus').textContent = connected
+    ? `Room: ${currentRoom} · ${rtcCount} cam(s) · max ${maxPreviews} previews`
+    : 'Not connected · HLS feeds always visible';
+  document.getElementById('roomLabel').textContent = connected ? currentRoom : '—';
+  document.getElementById('rtcCount').textContent = rtcCount;
+}
+
+function addLiveKitParticipant(identity, track) {
+  if (lkParticipants[identity]) return;
+  const vid = document.createElement('video');
+  vid.id = `lk-vid-${identity}`; vid.autoplay = true; vid.muted = true; vid.playsInline = true;
+  vid.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+  track.attach(vid);
+  lkParticipants[identity] = { track, videoEl: vid };
+  renderGrid();
+  updateLiveKitUI(true);
+  toast(`📷 ${identity} joined`);
+}
+
+function removeLiveKitParticipant(identity) {
+  if (lkParticipants[identity]) {
+    const { track, videoEl } = lkParticipants[identity];
+    track.detach(videoEl);
+    delete lkParticipants[identity];
+  }
+  const card = document.getElementById(`lk-card-${identity}`);
+  if (card) card.remove();
+  if (featuredKey === identity && featuredType === 'webrtc') {
+    featuredKey = null; featuredType = null;
+    updateOnAirBar(null, null); updateProgramMonitor(null, null);
+  }
+  updateLiveKitUI(lkConnected);
+  renderGrid();
+}
+
+// ── PROGRAM MONITOR ───────────────────────────────────────────────────────────
+function updateProgramMonitor(key, type) {
+  const wrap = document.getElementById('pmWrap');
+  const offline = document.getElementById('pmOffline');
+  const badge = document.getElementById('pmBadge');
+  const info = document.getElementById('pmInfo');
+
+  document.getElementById('pm-video')?.remove();
+  document.getElementById('pm-lk-video')?.remove();
+  if (cardPlayers['__pm__']) { cardPlayers['__pm__'].destroy(); delete cardPlayers['__pm__']; }
+
+  if (!key) { offline.style.display = 'flex'; badge.style.display = 'none'; info.textContent = 'Select a camera to go to air'; return; }
+
+  offline.style.display = 'none'; badge.style.display = 'block';
+
+  if (type === 'webrtc') {
+    badge.className = 'pm-badge webrtc'; badge.textContent = '● WEBRTC PROGRAM';
+    info.textContent = `${key} · LiveKit WebRTC`;
+    const p = lkParticipants[key];
+    if (p?.track) {
+      const vid = document.createElement('video');
+      vid.id = 'pm-lk-video'; vid.autoplay = true; vid.muted = true; vid.playsInline = true;
+      vid.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+      p.track.attach(vid); wrap.appendChild(vid);
+    }
+  } else {
+    badge.className = 'pm-badge hls'; badge.textContent = '● PROGRAM';
+    info.textContent = `${key} → live.xsen.fun:8443/hls/${key}`;
+    const vid = document.createElement('video');
+    vid.id = 'pm-video'; vid.muted = true; vid.autoplay = true; vid.playsInline = true;
+    vid.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    wrap.appendChild(vid);
+    if (Hls.isSupported()) cardPlayers['__pm__'] = makeHls(vid, key);
+    else if (vid.canPlayType('application/vnd.apple.mpegurl')) { vid.src = `${NGINX_BASE}/hls/${key}/index.m3u8`; vid.play().catch(()=>{}); }
+  }
+}
+
+// ── STREAM DETECT ─────────────────────────────────────────────────────────────
+async function detectStreams() {
+  try {
+    const r = await fetch(`${NGINX_BASE}/stat`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+    const xml = await r.text();
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const prev = new Set(allStreamKeys);
+    liveStreams = new Set(); allStreamKeys = [];
+
+    // Filter by room prefix if a room is connected, otherwise show all
+    const prefix = currentRoom ? `${currentRoom}-` : null;
+
+    doc.querySelectorAll('application').forEach(app => {
+      if (app.querySelector('name')?.textContent?.trim() !== 'live') return;
+      app.querySelectorAll('stream').forEach(s => {
+        const name = s.querySelector('name')?.textContent?.trim();
+        if (!name || !s.querySelector('active') || !s.querySelector('publishing')) return;
+        // Apply prefix filter if room is set
+        if (prefix && !name.startsWith(prefix)) return;
+        liveStreams.add(name); allStreamKeys.push(name);
+      });
+    });
+
+    allStreamKeys.forEach(k => ensurePrebuffered(k));
+    prev.forEach(k => { if (!liveStreams.has(k)) destroyPrebuffer(k); });
+
+  } catch(e) {
+    document.getElementById('connDot').className = 'conn-dot';
+    document.getElementById('connLabel').textContent = 'Error'; return;
+  }
+
+  document.getElementById('connDot').className = 'conn-dot live';
+  document.getElementById('connLabel').textContent = 'Connected';
+  document.getElementById('streamCount').textContent = liveStreams.size;
+  document.getElementById('lastPoll').innerHTML = 'POLLED: <span>' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '</span>';
+
+  if (featuredKey && featuredType === 'hls' && !liveStreams.has(featuredKey)) {
+    featuredKey = null; featuredType = null;
+    updateOnAirBar(null, null); updateProgramMonitor(null, null);
+    await patchSupabase(null); toast('⚠ Featured stream went offline');
+  }
+
+  renderGrid();
+}
+
+// ── RENDER GRID ───────────────────────────────────────────────────────────────
+function renderGrid() {
+  const grid = document.getElementById('feedGrid');
+  const hasHls = allStreamKeys.length > 0;
+  const hasRtc = Object.keys(lkParticipants).length > 0;
+
+  if (!hasHls && !hasRtc) {
+    Object.keys(cardPlayers).forEach(k => { if (k !== '__pm__') { cardPlayers[k].destroy(); delete cardPlayers[k]; }});
+    grid.innerHTML = `<div class="empty-state"><div class="empty-icon">📷</div><div class="empty-title">No Active Streams</div></div>`;
+    return;
+  }
+
+  // Clear and rebuild (simpler than diffing for now)
+  const pmPlayers = cardPlayers['__pm__'];
+  Object.keys(cardPlayers).forEach(k => { if (k !== '__pm__') { cardPlayers[k].destroy(); delete cardPlayers[k]; }});
+  if (pmPlayers) cardPlayers['__pm__'] = pmPlayers;
+  grid.innerHTML = '';
+
+  previewCount = 0; // reset preview counter
+
+  // HLS section
+  if (hasHls) {
+    addDivider(grid, 'RTMP / HLS FEEDS');
+    allStreamKeys.forEach((key, i) => {
+      const isOnAir = featuredKey === key && featuredType === 'hls';
+      const canPreview = previewCount < maxPreviews;
+      if (canPreview) previewCount++;
+      addHlsCard(grid, key, i + 1, isOnAir, canPreview);
+    });
+  }
+
+  // WebRTC section
+  if (hasRtc) {
+    addDivider(grid, 'WEBRTC / LIVEKIT FEEDS');
+    Object.entries(lkParticipants).forEach(([identity, { track, videoEl }], i) => {
+      const isOnAir = featuredKey === identity && featuredType === 'webrtc';
+      const canPreview = previewCount < maxPreviews;
+      if (canPreview) previewCount++;
+      addWebRtcCard(grid, identity, allStreamKeys.length + i + 1, isOnAir, canPreview, videoEl);
+    });
+  }
+}
+
+function addDivider(grid, label) {
+  const div = document.createElement('div');
+  div.className = 'section-divider';
+  div.innerHTML = `<div class="section-divider-line"></div><div class="section-divider-label">${label}</div><div class="section-divider-line"></div>`;
+  grid.appendChild(div);
+}
+
+function addHlsCard(grid, key, num, isOnAir, canPreview) {
+  const card = document.createElement('div');
+  card.className = `cam-card${isOnAir ? ' on-air' : ''}`;
+  card.dataset.key = key;
+  card.innerHTML = `
+    <div class="cam-video-wrap" id="wrap-${key}">
+      ${canPreview ? `<video id="card-vid-${key}" autoplay muted playsinline></video>` : `<div class="cam-no-preview"><div class="cam-no-preview-icon">📷</div><div class="cam-no-preview-text">PREVIEW CAP REACHED</div></div>`}
+      ${isOnAir ? `<div class="cam-badge-onair">● On Air</div>` : ''}
+      <div class="cam-badge-type hls">HLS</div>
+      <div class="cam-badge-num">CAM ${num}</div>
+    </div>
+    <div class="cam-body">
+      <div class="cam-name">${key}</div>
+      <button class="btn-cut ${isOnAir ? 'is-live' : 'can-cut'}" onclick="featureHls('${key}')" ${isOnAir ? 'disabled' : ''}>
+        ${isOnAir ? '✓ On Air' : '▶ CUT'}
+      </button>
+    </div>`;
+  grid.appendChild(card);
+  if (canPreview) {
+    requestAnimationFrame(() => {
+      const vid = document.getElementById(`card-vid-${key}`);
+      if (vid && Hls.isSupported()) cardPlayers[key] = makeHls(vid, key);
+    });
+  }
+}
+
+function addWebRtcCard(grid, identity, num, isOnAir, canPreview, videoEl) {
+  const card = document.createElement('div');
+  card.className = `cam-card${isOnAir ? ' on-air-rtc' : ''}`;
+  card.dataset.key = `lk:${identity}`;
+  card.id = `lk-card-${identity}`;
+  card.innerHTML = `
+    <div class="cam-video-wrap" id="lk-wrap-${identity}" style="position:relative;">
+      ${canPreview ? '' : `<div class="cam-no-preview"><div class="cam-no-preview-icon">📷</div><div class="cam-no-preview-text">PREVIEW CAP REACHED</div></div>`}
+      ${isOnAir ? `<div class="cam-badge-onair rtc">● On Air</div>` : ''}
+      <div class="cam-badge-type webrtc">WebRTC</div>
+      <div class="cam-badge-num">CAM ${num}</div>
+    </div>
+    <div class="cam-body">
+      <div class="cam-name">${identity}</div>
+      <button class="btn-cut ${isOnAir ? 'is-live-rtc' : 'can-cut-rtc'}" onclick="featureWebRTC('${identity}')" ${isOnAir ? 'disabled' : ''}>
+        ${isOnAir ? '✓ On Air' : '▶ CUT'}
+      </button>
+    </div>`;
+  grid.appendChild(card);
+  if (canPreview) {
+    requestAnimationFrame(() => {
+      const wrap = document.getElementById(`lk-wrap-${identity}`);
+      if (wrap && videoEl) {
+        videoEl.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0;';
+        wrap.insertBefore(videoEl, wrap.firstChild);
+      }
+    });
+  }
+}
+
+// ── FEATURE ───────────────────────────────────────────────────────────────────
+async function featureHls(key) {
+  const hlsUrl = `${NGINX_BASE}/hls/${key}/index.m3u8`;
+  const ok = await patchSupabase(hlsUrl);
+  if (ok) {
+    featuredKey = key; featuredType = 'hls';
+    updateOnAirBar(key, 'hls'); updateProgramMonitor(key, 'hls');
+    renderGrid(); toast(`▶ CUT TO ${key.toUpperCase()} (HLS)`);
+  }
+}
+
+async function featureWebRTC(identity) {
+  featuredKey = identity; featuredType = 'webrtc';
+  updateOnAirBar(identity, 'webrtc'); updateProgramMonitor(identity, 'webrtc');
+  renderGrid(); toast(`▶ CUT TO ${identity.toUpperCase()} (WebRTC)`);
+}
+
+async function stopBroadcast() {
+  if (featuredType === 'hls') await patchSupabase(null);
+  featuredKey = null; featuredType = null;
+  updateOnAirBar(null, null); updateProgramMonitor(null, null);
+  renderGrid(); toast('⬛ Broadcast stopped');
+}
+
+function updateOnAirBar(key, type) {
+  const status = document.getElementById('oabStatus');
+  const btn = document.getElementById('stopBtn');
+  if (key && type === 'hls') {
+    status.className = 'oab-status live';
+    status.innerHTML = `<div class="pulse"></div>${key.toUpperCase()} — HLS → viewers`;
+    btn.style.display = 'inline-block';
+  } else if (key && type === 'webrtc') {
+    status.className = 'oab-status webrtc-live';
+    status.innerHTML = `<div class="pulse-rtc"></div>${key.toUpperCase()} — WebRTC monitor`;
+    btn.style.display = 'inline-block';
+  } else {
+    status.className = 'oab-status'; status.textContent = 'Offline';
+    btn.style.display = 'none';
+  }
+}
+
+// ── COMMS ─────────────────────────────────────────────────────────────────────
+function sendComms() {
+  const input = document.getElementById('commsInput');
+  const sel = document.getElementById('commsTarget');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const target = sel.options[sel.selectedIndex].text;
+  const log = document.getElementById('commsLog');
+  const item = document.createElement('div');
+  item.className = 'log-item';
+  const t = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  item.innerHTML = `<span>${t}</span> → <span class="log-target">${target}</span>: <span class="log-msg">${msg}</span>`;
+  log.appendChild(item); log.scrollTop = log.scrollHeight;
+  input.value = ''; toast(`Sent → ${target}`);
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+function refreshAll() { detectStreams(); }
+refreshAll();
+setInterval(refreshAll, POLL_MS);
+</script>
+</body>
+</html>
