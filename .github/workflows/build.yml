@@ -39,6 +39,9 @@ jobs:
       - name: Fix executable permissions on node_modules binaries
         run: chmod -R +x node_modules/.bin
 
+      - name: Generate app icons and splash from resources/
+        run: npx @capacitor/assets generate --android
+
       - name: Capacitor sync
         run: npx cap sync android
 
