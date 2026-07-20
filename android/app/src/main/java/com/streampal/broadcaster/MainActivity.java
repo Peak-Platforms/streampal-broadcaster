@@ -22,7 +22,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS         = "streampal_prefs";
     private static final String KEY_STREAM    = "stream_key";
-    private static final String RTMP_SERVER   = "rtmp://157.245.208.49:1935/live";
+    private static final String RTMP_SERVER   = "rtmp://157.245.208.49:1935/sp";
     private static final int    PERM_REQUEST  = 100;
 
     private EditText streamKeyInput;
