@@ -17,6 +17,8 @@ public class RtmpPlugin extends Plugin {
     public static final String ACTION_STOP         = "com.streampal.STOP_STREAM";
     public static final String ACTION_FLIP         = "com.streampal.FLIP_CAMERA";
     public static final String ACTION_MUTE         = "com.streampal.MUTE_AUDIO";
+    public static final String ACTION_TOGGLE_RECORD = "com.streampal.TOGGLE_RECORD";
+    public static final String ACTION_RECORD_STATE  = "com.streampal.RECORD_STATE";
     public static final String ACTION_CONNECTED    = "com.streampal.CONNECTED";
     public static final String ACTION_FAILED       = "com.streampal.FAILED";
     public static final String ACTION_DISCONNECTED = "com.streampal.DISCONNECTED";
@@ -70,6 +72,12 @@ public class RtmpPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod
+    public void toggleRecord(PluginCall call) {
+        getContext().sendBroadcast(new Intent(ACTION_TOGGLE_RECORD));
+        call.resolve();
+    }
+
     private void registerEventReceiver() {
         eventReceiver = new BroadcastReceiver() {
             @Override
@@ -92,6 +100,10 @@ public class RtmpPlugin extends Plugin {
                     data.put("fps",      intent.getIntExtra("fps", 0));
                     data.put("dropped",  intent.getIntExtra("dropped", 0));
                     notifyListeners("streamEvent", data);
+                } else if (ACTION_RECORD_STATE.equals(action)) {
+                    data.put("status", "recordState");
+                    data.put("recording", intent.getBooleanExtra("recording", false));
+                    notifyListeners("streamEvent", data);
                 }
             }
         };
@@ -100,6 +112,7 @@ public class RtmpPlugin extends Plugin {
         filter.addAction(ACTION_FAILED);
         filter.addAction(ACTION_DISCONNECTED);
         filter.addAction(ACTION_STATS);
+        filter.addAction(ACTION_RECORD_STATE);
         getContext().registerReceiver(eventReceiver, filter);
     }
 

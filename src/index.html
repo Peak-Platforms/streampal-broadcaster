@@ -262,6 +262,7 @@
     <div class="controls-bar">
       <div class="ctrl-btn" id="muteBtn" onclick="toggleMute()" title="Mute">🎤</div>
       <div class="ctrl-btn" onclick="flipCamera()" title="Flip">🔄</div>
+      <div class="ctrl-btn" id="localRecordBtn" onclick="toggleLocalRecord()" title="Record Locally">⏺️</div>
     </div>
   </div>
 
@@ -442,6 +443,9 @@ function toggleMute() {
   if (RtmpStream) RtmpStream.muteAudio();
   toast(isMuted ? 'Muted' : 'Unmuted');
 }
+function toggleLocalRecord() {
+  if (RtmpStream) RtmpStream.toggleRecord();
+}
 
 // ── STREAM EVENTS ───────────────────────────────────────────────────────────
 function handleStreamEvent(event) {
@@ -468,8 +472,13 @@ function handleStreamEvent(event) {
     resetRecordBtn();
     document.getElementById('stopBtn').classList.remove('visible');
     if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
-  } else if (event.status === 'stats') {
+} else if (event.status === 'stats') {
     updateStats(event.bitrate, event.fps);
+  } else if (event.status === 'recordState') {
+    const btn = document.getElementById('localRecordBtn');
+    btn.classList.toggle('active', event.recording);
+    btn.title = event.recording ? 'Recording Locally — tap to stop' : 'Record Locally';
+    toast(event.recording ? 'Recording locally' : 'Local recording saved');
   }
 }
 
@@ -479,6 +488,9 @@ function resetRecordBtn() {
   document.getElementById('recordIcon').textContent = '●';
   document.getElementById('recordLabel').textContent = 'TAP TO GO LIVE';
   document.getElementById('recordLabel').classList.remove('live');
+  const localBtn = document.getElementById('localRecordBtn');
+  localBtn.classList.remove('active');
+  localBtn.title = 'Record Locally';
 }
 
 function setStatus(state, text) {

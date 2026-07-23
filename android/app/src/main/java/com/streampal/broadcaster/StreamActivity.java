@@ -1,12 +1,18 @@
 package com.streampal.broadcaster;
 
 import android.content.BroadcastReceiver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
+import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.WindowManager;
 
@@ -16,6 +22,9 @@ import com.pedro.common.ConnectChecker;
 import com.pedro.library.rtmp.RtmpCamera2;
 import com.pedro.library.view.OpenGlView;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -27,6 +36,9 @@ public class StreamActivity extends AppCompatActivity
     private int         width, height, fps, bitrate;
     private boolean     muted  = false;
     private boolean     isLive = false;
+    private boolean     isRecording = false;
+    private Uri         recordUri;
+    private ParcelFileDescriptor recordPfd;
 
     private Timer   statsTimer;
     private Handler mainHandler;
@@ -53,6 +65,14 @@ public class StreamActivity extends AppCompatActivity
 
         rtmpCamera = new RtmpCamera2(openGlView, this);
         registerControlReceiver();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (rtmpCamera != null) {
+            rtmpCamera.setZoom(event);
+        }
+        return true;
     }
 
     @Override
@@ -91,8 +111,65 @@ public class StreamActivity extends AppCompatActivity
         }
     }
 
+    private void startRecording() {
+        if (isRecording || rtmpCamera == null) return;
+        try {
+            String filename = "StreamPal_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".mp4";
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, filename);
+            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/StreamPal");
+            values.put(MediaStore.Video.Media.IS_PENDING, 1);
+
+            recordUri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+            if (recordUri == null) {
+                sendEvent(RtmpPlugin.ACTION_FAILED, "Could not create recording file");
+                return;
+            }
+            recordPfd = getContentResolver().openFileDescriptor(recordUri, "rw");
+            if (recordPfd == null) {
+                sendEvent(RtmpPlugin.ACTION_FAILED, "Could not open recording file");
+                return;
+            }
+            rtmpCamera.startRecord(recordPfd.getFileDescriptor());
+            isRecording = true;
+            sendRecordEvent(true);
+        } catch (Exception e) {
+            isRecording = false;
+            sendEvent(RtmpPlugin.ACTION_FAILED, "Recording failed: " + e.getMessage());
+        }
+    }
+
+    private void stopRecording() {
+        if (!isRecording) return;
+        try {
+            rtmpCamera.stopRecord();
+        } catch (Exception ignored) {}
+
+        isRecording = false;
+
+        if (recordUri != null) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.IS_PENDING, 0);
+            getContentResolver().update(recordUri, values, null, null);
+            recordUri = null;
+        }
+        if (recordPfd != null) {
+            try { recordPfd.close(); } catch (Exception ignored) {}
+            recordPfd = null;
+        }
+        sendRecordEvent(false);
+    }
+
+    private void sendRecordEvent(boolean recording) {
+        Intent intent = new Intent(RtmpPlugin.ACTION_RECORD_STATE);
+        intent.putExtra("recording", recording);
+        sendBroadcast(intent);
+    }
+
     private void stopStream() {
         isLive = false;
+        stopRecording();
         if (statsTimer != null) { statsTimer.cancel(); statsTimer = null; }
         if (rtmpCamera != null) {
             if (rtmpCamera.isStreaming()) rtmpCamera.stopStream();
@@ -142,6 +219,9 @@ public class StreamActivity extends AppCompatActivity
                     muted = !muted;
                     if (muted) rtmpCamera.disableAudio();
                     else       rtmpCamera.enableAudio();
+                } else if (RtmpPlugin.ACTION_TOGGLE_RECORD.equals(action)) {
+                    if (isRecording) stopRecording();
+                    else             startRecording();
                 }
             }
         };
@@ -149,6 +229,7 @@ public class StreamActivity extends AppCompatActivity
         filter.addAction(RtmpPlugin.ACTION_STOP);
         filter.addAction(RtmpPlugin.ACTION_FLIP);
         filter.addAction(RtmpPlugin.ACTION_MUTE);
+        filter.addAction(RtmpPlugin.ACTION_TOGGLE_RECORD);
         registerReceiver(controlReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
     }
 
