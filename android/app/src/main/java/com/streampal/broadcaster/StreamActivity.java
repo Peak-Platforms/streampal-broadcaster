@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -14,9 +15,15 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -50,6 +57,10 @@ public class StreamActivity extends AppCompatActivity
 
     private static final int PERM_REQUEST = 100;
     private OpenGlView openGlView;
+
+    private TextView bitrateLabel;
+    private Button   muteBtn;
+    private Button   recordBtn;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,13 +105,99 @@ public class StreamActivity extends AppCompatActivity
     }
 
     private void initCameraView() {
-        // Create OpenGlView programmatically to avoid R.layout issues
+        FrameLayout root = new FrameLayout(this);
+
         openGlView = new OpenGlView(this);
-        setContentView(openGlView);
+        root.addView(openGlView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+        root.addView(buildOverlay());
+
+        setContentView(root);
         openGlView.getHolder().addCallback(this);
 
         rtmpCamera = new RtmpCamera2(openGlView, this);
         registerControlReceiver();
+    }
+
+    private View buildOverlay() {
+        int pad = dp(12);
+
+        bitrateLabel = new TextView(this);
+        bitrateLabel.setText("— kbps");
+        bitrateLabel.setTextColor(Color.WHITE);
+        bitrateLabel.setTextSize(12);
+        bitrateLabel.setPadding(dp(10), dp(6), dp(10), dp(6));
+        bitrateLabel.setBackgroundColor(Color.parseColor("#88000000"));
+        FrameLayout.LayoutParams bitrateParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+        bitrateParams.gravity = Gravity.TOP | Gravity.END;
+        bitrateParams.setMargins(0, dp(24), dp(16), 0);
+
+        FrameLayout topRight = new FrameLayout(this);
+        topRight.addView(bitrateLabel);
+        topRight.setLayoutParams(bitrateParams);
+
+        LinearLayout bottomBar = new LinearLayout(this);
+        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+        bottomBar.setGravity(Gravity.CENTER);
+        bottomBar.setPadding(pad, pad, pad, dp(32));
+        bottomBar.setBackgroundColor(Color.parseColor("#88000000"));
+
+        Button stopBtn = makeButton("⬛ Stop", "#dc2626");
+        stopBtn.setOnClickListener(v -> { stopStream(); finish(); });
+
+        Button flipBtn = makeButton("🔄 Flip", "#374151");
+        flipBtn.setOnClickListener(v -> { if (rtmpCamera != null) rtmpCamera.switchCamera(); });
+
+        muteBtn = makeButton("🎤 Mute", "#374151");
+        muteBtn.setOnClickListener(v -> {
+            muted = !muted;
+            if (rtmpCamera != null) {
+                if (muted) rtmpCamera.disableAudio(); else rtmpCamera.enableAudio();
+            }
+            muteBtn.setText(muted ? "🔇 Muted" : "🎤 Mute");
+        });
+
+        recordBtn = makeButton("⏺️ Record", "#374151");
+        recordBtn.setOnClickListener(v -> {
+            if (isRecording) stopRecording(); else startRecording();
+            recordBtn.setText(isRecording ? "⏺️ Stop Rec" : "⏺️ Record");
+        });
+
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        btnParams.setMargins(dp(4), 0, dp(4), 0);
+
+        bottomBar.addView(flipBtn, btnParams);
+        bottomBar.addView(muteBtn, btnParams);
+        bottomBar.addView(recordBtn, btnParams);
+        bottomBar.addView(stopBtn, btnParams);
+
+        FrameLayout.LayoutParams bottomParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+        bottomParams.gravity = Gravity.BOTTOM;
+        bottomBar.setLayoutParams(bottomParams);
+
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.addView(bottomBar);
+        overlay.addView(topRight);
+        return overlay;
+    }
+
+    private Button makeButton(String label, String colorHex) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(12);
+        b.setAllCaps(false);
+        b.setBackgroundColor(Color.parseColor(colorHex));
+        return b;
+    }
+
+    private int dp(int value) {
+        float density = getResources().getDisplayMetrics().density;
+        return Math.round(value * density);
     }
 
     @Override
@@ -233,8 +330,14 @@ public class StreamActivity extends AppCompatActivity
             @Override
             public void run() {
                 if (!isLive) return;
+                final long currentBitrate = rtmpCamera.getBitrate();
+                mainHandler.post(() -> {
+                    if (bitrateLabel != null) {
+                        bitrateLabel.setText(Math.round(currentBitrate / 1024f) + " kbps");
+                    }
+                });
                 Intent intent = new Intent(RtmpPlugin.ACTION_STATS);
-                intent.putExtra("bitrate", rtmpCamera.getBitrate());
+                intent.putExtra("bitrate", currentBitrate);
                 intent.putExtra("fps",     30);
                 intent.putExtra("dropped", 0);
                 sendBroadcast(intent);
