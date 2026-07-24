@@ -427,7 +427,8 @@ async function startStream() {
   } else if (window.Capacitor && window.Capacitor.isNativePlatform()) {
     setStatus('error', 'Streaming plugin unavailable');
     resetRecordBtn();
-    toast('Native streaming plugin not available — restart the app');
+    const available = Object.keys(window.Capacitor.Plugins || {}).join(', ') || 'none';
+    toast('RtmpStream not found. Available: ' + available);
   } else {
     simulateStream();
   }
