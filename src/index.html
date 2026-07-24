@@ -296,16 +296,26 @@ let startTime     = null;
 // ── CAPACITOR PLUGIN ────────────────────────────────────────────────────────
 let RtmpStream = null;
 
-function initPlugin() {
+function initPlugin(attempt) {
+  attempt = attempt || 0;
   if (window.Capacitor && window.Capacitor.isNativePlatform()) {
     RtmpStream = window.Capacitor.Plugins?.RtmpStream || null;
     if (RtmpStream) {
       RtmpStream.addListener('streamEvent', handleStreamEvent);
+      return;
     }
+  }
+  // Native bridge / plugin not ready yet — retry for up to ~6 seconds
+  if (attempt < 24) {
+    setTimeout(() => initPlugin(attempt + 1), 250);
+  } else if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    // Running natively but the plugin genuinely never registered — surface this
+    // clearly instead of silently falling back to the browser simulator.
+    toast('Native streaming plugin failed to load — restart the app');
   }
 }
 document.addEventListener('deviceready', initPlugin);
-setTimeout(initPlugin, 300);
+initPlugin();
 
 // ── SUPABASE CONFIG FETCH ───────────────────────────────────────────────────
 async function fetchRtmpUrl(code) {
@@ -413,6 +423,10 @@ async function startStream() {
       setStatus('error', 'Failed to start');
       resetRecordBtn();
     }
+  } else if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    setStatus('error', 'Streaming plugin unavailable');
+    resetRecordBtn();
+    toast('Native streaming plugin not available — restart the app');
   } else {
     simulateStream();
   }
