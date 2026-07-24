@@ -1,10 +1,12 @@
 package com.streampal.broadcaster;
 
+import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -17,6 +19,8 @@ import android.view.SurfaceHolder;
 import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.pedro.common.ConnectChecker;
 import com.pedro.library.rtmp.RtmpCamera2;
@@ -44,6 +48,9 @@ public class StreamActivity extends AppCompatActivity
     private Handler mainHandler;
     private BroadcastReceiver controlReceiver;
 
+    private static final int PERM_REQUEST = 100;
+    private OpenGlView openGlView;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -58,8 +65,37 @@ public class StreamActivity extends AppCompatActivity
         fps     = i.getIntExtra("fps",     30);
         bitrate = i.getIntExtra("bitrate", 1500 * 1024);
 
+        if (hasPermissions()) {
+            initCameraView();
+        } else {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO},
+                    PERM_REQUEST);
+        }
+    }
+
+    private boolean hasPermissions() {
+        boolean camOk   = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)       == PackageManager.PERMISSION_GRANTED;
+        boolean audioOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        return camOk && audioOk;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == PERM_REQUEST) {
+            if (hasPermissions()) {
+                initCameraView();
+            } else {
+                sendEvent(RtmpPlugin.ACTION_FAILED, "Camera and microphone permissions required");
+                finish();
+            }
+        }
+    }
+
+    private void initCameraView() {
         // Create OpenGlView programmatically to avoid R.layout issues
-        OpenGlView openGlView = new OpenGlView(this);
+        openGlView = new OpenGlView(this);
         setContentView(openGlView);
         openGlView.getHolder().addCallback(this);
 
