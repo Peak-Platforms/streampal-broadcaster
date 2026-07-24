@@ -311,7 +311,8 @@ function initPlugin(attempt) {
   } else if (window.Capacitor && window.Capacitor.isNativePlatform()) {
     // Running natively but the plugin genuinely never registered — surface this
     // clearly instead of silently falling back to the browser simulator.
-    toast('Native streaming plugin failed to load — restart the app');
+    const available = Object.keys(window.Capacitor.Plugins || {}).join(', ') || 'none';
+    toast('RtmpStream plugin not found. Available: ' + available);
   }
 }
 document.addEventListener('deviceready', initPlugin);
