@@ -31,6 +31,7 @@ import androidx.core.content.ContextCompat;
 
 import com.pedro.common.ConnectChecker;
 import com.pedro.library.rtmp.RtmpCamera2;
+import com.pedro.library.util.BitrateAdapter;
 import com.pedro.library.view.OpenGlView;
 
 import java.text.SimpleDateFormat;
@@ -44,12 +45,14 @@ public class StreamActivity extends AppCompatActivity
 
     private RtmpCamera2 rtmpCamera;
     private String      rtmpUrl;
-    private int         width, height, fps, bitrate;
+    private int         width, height, fps, maxBitrate;
     private boolean     muted  = false;
     private boolean     isLive = false;
     private boolean     isRecording = false;
     private Uri         recordUri;
     private ParcelFileDescriptor recordPfd;
+
+    private BitrateAdapter bitrateAdapter;
 
     private Timer   statsTimer;
     private Handler mainHandler;
@@ -70,11 +73,11 @@ public class StreamActivity extends AppCompatActivity
         mainHandler = new Handler(Looper.getMainLooper());
 
         Intent i = getIntent();
-        rtmpUrl = i.getStringExtra("url");
-        width   = i.getIntExtra("width",   1280);
-        height  = i.getIntExtra("height",  720);
-        fps     = i.getIntExtra("fps",     30);
-        bitrate = i.getIntExtra("bitrate", 1500 * 1024);
+        rtmpUrl    = i.getStringExtra("url");
+        width      = i.getIntExtra("width",   1280);
+        height     = i.getIntExtra("height",  720);
+        fps        = i.getIntExtra("fps",     30);
+        maxBitrate = i.getIntExtra("bitrate", 1500 * 1024);
 
         if (hasPermissions()) {
             initCameraView();
@@ -105,6 +108,13 @@ public class StreamActivity extends AppCompatActivity
     }
 
     private void initCameraView() {
+        // Adaptive bitrate: starts at maxBitrate ceiling, steps down under
+        // congestion / low real throughput, steps back up as conditions allow.
+        bitrateAdapter = new BitrateAdapter(bitrate -> {
+            if (rtmpCamera != null) rtmpCamera.setVideoBitrateOnFly(bitrate);
+        });
+        bitrateAdapter.setMaxBitrate(maxBitrate);
+
         FrameLayout root = new FrameLayout(this);
 
         openGlView = new OpenGlView(this);
@@ -232,7 +242,7 @@ public class StreamActivity extends AppCompatActivity
             if (!rtmpCamera.isOnPreview()) {
                 rtmpCamera.startPreview(width, height);
             }
-            if (rtmpCamera.prepareAudio() && rtmpCamera.prepareVideo(width, height, fps, bitrate, 0)) {
+            if (rtmpCamera.prepareAudio() && rtmpCamera.prepareVideo(width, height, fps, maxBitrate, 0)) {
                 rtmpCamera.startStream(rtmpUrl);
                 isLive = true;
                 startStatsTimer();
@@ -322,7 +332,12 @@ public class StreamActivity extends AppCompatActivity
     }
     @Override public void onAuthError() { sendEvent(RtmpPlugin.ACTION_FAILED, "Auth error"); }
     @Override public void onAuthSuccess() {}
-    @Override public void onNewBitrate(long bitrate) {}
+    @Override
+    public void onNewBitrate(long bitrate) {
+        if (rtmpCamera != null && bitrateAdapter != null) {
+            bitrateAdapter.adaptBitrate(bitrate, rtmpCamera.getStreamClient().hasCongestion());
+        }
+    }
 
     private void startStatsTimer() {
         statsTimer = new Timer();
@@ -338,7 +353,7 @@ public class StreamActivity extends AppCompatActivity
                 });
                 Intent intent = new Intent(RtmpPlugin.ACTION_STATS);
                 intent.putExtra("bitrate", currentBitrate);
-                intent.putExtra("fps",     30);
+                intent.putExtra("fps",     fps);
                 intent.putExtra("dropped", 0);
                 sendBroadcast(intent);
             }
