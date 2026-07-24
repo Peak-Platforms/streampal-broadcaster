@@ -25,14 +25,11 @@ public class RtmpPlugin extends Plugin {
     public static final String ACTION_STATS        = "com.streampal.STATS";
 
     private BroadcastReceiver eventReceiver;
-
-    @Override
-    public void load() {
-        registerEventReceiver();
-    }
+    private boolean receiverRegistered = false;
 
     @PluginMethod
     public void startStream(PluginCall call) {
+        ensureReceiverRegistered();
         String url     = call.getString("url");
         int    width   = call.getInt("width",   1280);
         int    height  = call.getInt("height",  720);
@@ -78,7 +75,9 @@ public class RtmpPlugin extends Plugin {
         call.resolve();
     }
 
-    private void registerEventReceiver() {
+    private void ensureReceiverRegistered() {
+        if (receiverRegistered) return;
+        receiverRegistered = true;
         eventReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context ctx, Intent intent) {
