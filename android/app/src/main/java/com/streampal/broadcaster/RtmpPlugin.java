@@ -5,6 +5,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 
+import androidx.core.content.ContextCompat;
+
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -112,7 +114,7 @@ public class RtmpPlugin extends Plugin {
         filter.addAction(ACTION_DISCONNECTED);
         filter.addAction(ACTION_STATS);
         filter.addAction(ACTION_RECORD_STATE);
-        getContext().registerReceiver(eventReceiver, filter);
+        ContextCompat.registerReceiver(getContext(), eventReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     @Override
