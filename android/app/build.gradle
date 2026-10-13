@@ -47,4 +47,8 @@ dependencies {
     // RootEncoder RTMP library
     implementation 'com.github.pedroSG94.RootEncoder:library:2.7.2'
 
+    // Offline voice commands (Vosk speech recognition)
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
+    implementation 'com.alphacephei:vosk-android:0.3.47'
+
 }
