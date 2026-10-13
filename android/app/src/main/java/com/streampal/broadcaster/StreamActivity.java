@@ -64,6 +64,8 @@ public class StreamActivity extends AppCompatActivity
     private TextView bitrateLabel;
     private Button   muteBtn;
     private Button   recordBtn;
+    private Button   voiceBtn;
+    private VoiceListener voice;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -175,6 +177,9 @@ public class StreamActivity extends AppCompatActivity
             recordBtn.setText(isRecording ? "⏺️ Stop Rec" : "⏺️ Record");
         });
 
+        voiceBtn = makeButton("🗣 Voice: Off", "#374151");
+        voiceBtn.setOnClickListener(v -> toggleVoice());
+
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         btnParams.setMargins(dp(4), 0, dp(4), 0);
@@ -182,6 +187,7 @@ public class StreamActivity extends AppCompatActivity
         bottomBar.addView(flipBtn, btnParams);
         bottomBar.addView(muteBtn, btnParams);
         bottomBar.addView(recordBtn, btnParams);
+        bottomBar.addView(voiceBtn, btnParams);
         bottomBar.addView(stopBtn, btnParams);
 
         FrameLayout.LayoutParams bottomParams = new FrameLayout.LayoutParams(
@@ -193,6 +199,23 @@ public class StreamActivity extends AppCompatActivity
         overlay.addView(bottomBar);
         overlay.addView(topRight);
         return overlay;
+    }
+
+    // Voice commands ("Peak, <command>"): the stream key is the last part of the RTMP URL.
+    private void toggleVoice() {
+        if (voice != null && voice.isRunning()) {
+            voice.stop();
+            return;
+        }
+        if (!isLive || rtmpUrl == null) {
+            voiceBtn.setText("🗣 Go live first");
+            return;
+        }
+        String key = rtmpUrl.substring(rtmpUrl.lastIndexOf('/') + 1);
+        voice = new VoiceListener(this, key, status -> {
+            if (voiceBtn != null) voiceBtn.setText("🗣 " + status);
+        });
+        voice.start();
     }
 
     private Button makeButton(String label, String colorHex) {
@@ -312,6 +335,7 @@ public class StreamActivity extends AppCompatActivity
 
     private void stopStream() {
         isLive = false;
+        if (voice != null) { voice.stop(); voice = null; }
         stopRecording();
         if (statsTimer != null) { statsTimer.cancel(); statsTimer = null; }
         if (rtmpCamera != null) {
